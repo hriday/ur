@@ -5,3 +5,4 @@ export * from './dice';
 export * from './rules';
 export * from './explain';
 export * from './ai';
+export * from './protocol';
