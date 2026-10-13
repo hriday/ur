@@ -30,7 +30,7 @@
   data-piece={key}
   data-movable={movable || undefined}
   style="transform: translate({x}px, {y}px) scale({scale}); transition-duration: {duration}ms"
-  role={onactivate ? 'button' : 'img'}
+  role={movable ? 'button' : 'img'}
   tabindex={movable ? 0 : undefined}
   aria-label={label}
   onpointerup={(e) => onactivate?.(e.pointerType || 'mouse')}
@@ -38,7 +38,7 @@
   onpointerleave={(e) => e.pointerType === 'mouse' && onhover?.(false)}
   onfocus={() => onselect?.()}
 >
-  <circle class="hit" r={r + 8} />
+  <circle class="hit" r={r + 20} />
   <circle class="halo" r={r + 6} />
   <ellipse class="shadow" cx="3" cy="6" rx={r} ry={r * 0.94} />
   <circle class="body" r={r} />
@@ -51,7 +51,8 @@
 <style>
   .piece { transition-property: transform; transition-timing-function: cubic-bezier(0.4, 0.1, 0.3, 1); outline: none; }
   .movable { cursor: pointer; }
-  .hit { fill: transparent; }
+  .hit { fill: transparent; pointer-events: none; }
+  .movable .hit { pointer-events: all; }
   .halo { fill: none; stroke: var(--gold-pale); stroke-width: 3; opacity: 0; }
   .movable .halo { animation: pulse 1.6s ease-in-out infinite; }
   .selected .halo, .piece:focus-visible .halo { opacity: 1; animation: none; stroke-width: 4; }
