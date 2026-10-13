@@ -10,6 +10,7 @@
   let { gameId }: { gameId: string } = $props();
   let controller = $state<OnlineController | null>(null);
   let failure = $state<string | null>(null);
+  let destroyed = false;
 
   async function start() {
     failure = null;
@@ -26,14 +27,19 @@
           }
         }
       }
+      if (destroyed) return;
       controller = new OnlineController(gameId, token);
     } catch (e) {
+      if (destroyed) return;
       failure = e instanceof ApiError && e.status === 404 ? 'notFound' : e instanceof Error ? e.message : 'Something went wrong.';
     }
   }
 
   onMount(start);
-  onDestroy(() => controller?.dispose());
+  onDestroy(() => {
+    destroyed = true;
+    controller?.dispose();
+  });
 </script>
 
 {#snippet goneView()}

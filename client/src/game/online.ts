@@ -33,7 +33,7 @@ export class OnlineController implements GameController {
 
   constructor(private gameId: string, private token: string | null) {
     document.addEventListener('visibilitychange', this.onVisibility);
-    window.addEventListener('online', this.onVisibility);
+    window.addEventListener('online', this.onOnline);
     this.connect();
   }
 
@@ -48,12 +48,23 @@ export class OnlineController implements GameController {
     const stale = this.hiddenAt && Date.now() - this.hiddenAt > STALE_AFTER_HIDDEN_MS;
     this.hiddenAt = 0;
     if (open && !stale) return;
+    this.forceReconnect();
+  };
+
+  private onOnline = () => {
+    if (this.closed) return;
+    if (this.ws?.readyState === WebSocket.OPEN) return;
+    this.forceReconnect();
+  };
+
+  private forceReconnect() {
     clearTimeout(this.timer);
     const old = this.ws;
     this.ws = null;
     old?.close();
+    this.setStatus('reconnecting');
     this.connect();
-  };
+  }
 
   private setStatus(s: ConnectionStatus) {
     this.status = s;
@@ -71,7 +82,12 @@ export class OnlineController implements GameController {
       this.setStatus('open');
     };
     ws.onmessage = (e) => {
-      const msg = JSON.parse(String(e.data)) as ServerMsg;
+      let msg: ServerMsg;
+      try {
+        msg = JSON.parse(String(e.data)) as ServerMsg;
+      } catch {
+        return;
+      }
       if (msg.type === 'snapshot') {
         const snapshot = toSnapshot(msg.snapshot);
         this.last = snapshot;
@@ -113,7 +129,7 @@ export class OnlineController implements GameController {
     this.closed = true;
     clearTimeout(this.timer);
     document.removeEventListener('visibilitychange', this.onVisibility);
-    window.removeEventListener('online', this.onVisibility);
+    window.removeEventListener('online', this.onOnline);
     this.ws?.close();
     this.updates.clear();
     this.errors.clear();
