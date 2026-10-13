@@ -5,6 +5,10 @@ export async function quiet(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('ur.coach.off', '1');
     localStorage.setItem('ur.muted', '1');
+    // Record Content-Security-Policy violations so tests can assert the app runs under the CSP.
+    const csp: string[] = [];
+    (window as unknown as { __urCsp: string[] }).__urCsp = csp;
+    document.addEventListener('securitypolicyviolation', (e) => csp.push(`${e.violatedDirective} ${e.blockedURI}`));
     // Track every WebSocket so tests can cut the connection without reloading.
     const w = window as unknown as { __urSockets: WebSocket[] };
     w.__urSockets = [];
@@ -17,6 +21,9 @@ export async function quiet(page: Page) {
     };
   });
 }
+
+/** CSP violations seen on this page since it loaded. */
+export const cspViolations = (page: Page) => page.evaluate(() => (window as unknown as { __urCsp: string[] }).__urCsp);
 
 /** Drops the live connection(s) without reloading the page. */
 export async function dropSockets(page: Page) {

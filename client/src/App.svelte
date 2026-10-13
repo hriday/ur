@@ -16,6 +16,8 @@
 <SvgDefs />
 {#if route.path === '/'}
   <Home />
+{:else if /^\/play\/ai\/?$/.test(route.path)}
+  <Home chooseLevel />
 {:else if gameMatch}
   {#key gameMatch[1].toUpperCase()}<OnlineGame gameId={gameMatch[1].toUpperCase()} />{/key}
 {:else if aiMatch}

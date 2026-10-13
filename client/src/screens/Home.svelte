@@ -19,7 +19,11 @@
     { player: 1 as const, ...piecePoint(1, 13, 0, 0) },
   ];
 
-  let choosingLevel = $state(false);
+  /** Open with the difficulty picker showing (the /play/ai route). */
+  let { chooseLevel = false }: { chooseLevel?: boolean } = $props();
+
+  /* svelte-ignore state_referenced_locally */
+  let choosingLevel = $state(chooseLevel);
   let creating = $state(false);
   let error = $state<string | null>(null);
 

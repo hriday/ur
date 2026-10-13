@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { act, playUntilVictory, quiet } from './helpers';
+import { act, cspViolations, playUntilVictory, quiet } from './helpers';
 
 test.beforeEach(async ({ page }) => quiet(page));
 
@@ -65,4 +65,48 @@ test('home fits the screen without sideways scrolling', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Play a Friend' })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('/play/ai opens the difficulty picker', async ({ page }) => {
+  await page.goto('/play/ai');
+  await expect(page.getByRole('heading', { name: /The Royal Game/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play the Computer' })).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('link', { name: /Medium/ }).click();
+  await expect(page).toHaveURL(/\/play\/ai\/medium$/);
+  await expect(page.getByText('Computer · Medium')).toBeVisible();
+});
+
+test('pass & play and computer games survive a reload', async ({ page }) => {
+  const onBoard = page.locator('[aria-label*="piece on square"]');
+  const board = async () =>
+    (await onBoard.evaluateAll((els) => els.map((e) => (e.getAttribute('aria-label') ?? '').replace(', can move', '')))).sort();
+  for (const path of ['/play/local', '/play/ai/easy']) {
+    await page.goto(path);
+    for (let i = 0; i < 400 && (await onBoard.count()) < 2; i++) {
+      if (!(await act(page))) await page.waitForTimeout(50);
+    }
+    // Wait until it is our turn to roll, so nothing moves on its own across the reload.
+    await expect(page.getByTestId('dice')).toBeEnabled({ timeout: 30_000 });
+    const before = await board();
+    expect(before.length).toBeGreaterThanOrEqual(2);
+    await page.reload();
+    await expect(page.getByTestId('dice')).toBeEnabled({ timeout: 30_000 });
+    expect(await board()).toEqual(before);
+  }
+});
+
+test('the app runs under its Content Security Policy', async ({ page }) => {
+  const res = await page.goto('/');
+  expect(res?.headers()['content-security-policy']).toContain("script-src 'self'");
+  await expect(page.getByRole('heading', { name: /The Royal Game/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Play the Computer' }).click();
+  await page.getByRole('link', { name: /Hard/ }).click();
+  // Let the computer think in its worker at least once.
+  let mine = 0;
+  for (let i = 0; i < 400 && mine < 3; i++) {
+    if (await act(page)) mine++;
+    else await page.waitForTimeout(100);
+  }
+  await expect.poll(() => page.getByRole('img', { name: /Carnelian piece on square/ }).count(), { timeout: 30_000 }).toBeGreaterThan(0);
+  expect(await cspViolations(page)).toEqual([]);
 });
