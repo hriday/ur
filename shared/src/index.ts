@@ -4,3 +4,4 @@ export * from './rng';
 export * from './dice';
 export * from './rules';
 export * from './explain';
+export * from './ai';
