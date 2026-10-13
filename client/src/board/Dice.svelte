@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Dice } from '@ur/shared';
 
-  interface Props { dice: Dice | null; total: number | null; rolling: boolean; enabled: boolean; onroll?: () => void }
-  let { dice, total, rolling, enabled, onroll }: Props = $props();
+  interface Props { dice: Dice | null; total: number | null; rolling: boolean; enabled: boolean; onroll?: () => void; testid?: string }
+  let { dice, total, rolling, enabled, onroll, testid = 'dice' }: Props = $props();
 </script>
 
 <button
@@ -10,7 +10,7 @@
   class:enabled
   class:rolling
   type="button"
-  data-testid="dice"
+  data-testid={testid}
   disabled={!enabled}
   onclick={() => onroll?.()}
   aria-label={enabled ? 'Roll the dice' : total === null ? 'Dice' : `Last roll: ${total}`}

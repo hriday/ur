@@ -1,19 +1,22 @@
 <script lang="ts">
   import { onDestroy, type Snippet } from 'svelte';
-  import { OFF, START, legalMoves, other, whyCannotMove, type GameEvent, type GameState, type Player } from '@ur/shared';
+  import { CENTRAL_ROSETTE, OFF, START, isShared, legalMoves, other, whyCannotMove, type GameEvent, type GameState, type Player } from '@ur/shared';
   import { sound } from '../audio/sound.svelte';
   import Board from '../board/Board.svelte';
   import Dice from '../board/Dice.svelte';
   import type { Effect } from '../board/effects';
   import { piecePoint, traySlot, type Point } from '../board/geometry';
   import type { ConnectionStatus, GameController, Snapshot, Update } from '../game/controller';
+  import { coach } from '../game/coach.svelte';
   import { describeEvent, eventToast } from '../game/messages';
   import { reducedMotion, sleep } from '../lib/motion';
+  import Coach from '../ui/Coach.svelte';
   import PlayerHud from '../ui/PlayerHud.svelte';
   import Toasts from '../ui/Toasts.svelte';
   import TopBar from '../ui/TopBar.svelte';
   import VictoryOverlay from '../ui/VictoryOverlay.svelte';
   import { toasts } from '../ui/toastStore.svelte';
+  import HowToPlay from './HowToPlay.svelte';
 
   interface Props { controller: GameController; invite?: Snippet; gone?: Snippet }
   let { controller, invite, gone }: Props = $props();
@@ -32,6 +35,7 @@
   let status = $state<ConnectionStatus>('connecting');
   let announcement = $state('');
   let vertical = $state(false);
+  let helpOpen = $state(false);
 
   const queue: Update[] = [];
   let introShown = false;
@@ -98,6 +102,7 @@
       }
     } finally {
       animating = false;
+      coachForPosition();
       controller.idle();
     }
   }
@@ -142,7 +147,25 @@
     if (t) toasts.push(t);
   }
 
+  function coachForEvent(e: GameEvent) {
+    const mine = snap!.controls.includes(e.player);
+    if (e.type === 'passed' && mine) coach.trigger('pass');
+    if (e.type === 'rosette' && mine) coach.trigger(e.at === CENTRAL_ROSETTE ? 'central' : 'rosette');
+    if (e.type === 'captured' && (mine || snap!.controls.includes(e.victim))) coach.trigger('capture');
+  }
+
+  function coachForPosition() {
+    if (!display || !snap || !bothSeated || display.phase === 'finished' || !snap.controls.includes(display.current)) return;
+    coach.trigger(display.phase === 'awaitingRoll' ? 'roll' : 'move');
+    const theirs = display.pieces[other(display.current)];
+    const threatened = display.pieces[display.current].some(
+      (pos) => isShared(pos) && pos !== CENTRAL_ROSETTE && theirs.some((o) => o >= 1 && o < pos && pos - o <= 4),
+    );
+    if (threatened) coach.trigger('danger');
+  }
+
   async function animate(e: GameEvent) {
+    coachForEvent(e);
     switch (e.type) {
       case 'rolled':
         rolling = true;
@@ -216,11 +239,13 @@
 
   function doRoll() {
     if (!canRoll) return;
+    if (coach.current === 'roll') coach.dismiss();
     pending = true;
     controller.roll();
   }
 
   function doMove(piece: number) {
+    if (coach.current === 'move') coach.dismiss();
     pending = true;
     selected = null;
     controller.move(piece);
@@ -243,6 +268,10 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    if (helpOpen) {
+      if (e.key === 'Escape') helpOpen = false;
+      return;
+    }
     if (e.defaultPrevented || e.altKey || e.metaKey || e.ctrlKey) return;
     if (e.target instanceof Element && e.target.closest('button, a, input, textarea, [role="dialog"]')) return;
     if (e.key === ' ') {
@@ -302,7 +331,7 @@
   {@render gone()}
 {:else}
   <div class="screen" class:vertical>
-    <TopBar />
+    <TopBar onhelp={() => (helpOpen = true)} />
     {#if status === 'reconnecting'}<div class="banner" role="status">Connection lost — reconnecting…</div>{/if}
     {#if snap?.spectator}<div class="banner subtle" role="status">You are watching this game.</div>{/if}
 
@@ -324,6 +353,7 @@
           onghost={() => selected !== null && doMove(selected)}
         />
         {#if introText}<div class="intro" role="status"><p>{introText}</p></div>{/if}
+        <Coach />
       </div>
       <div class="bottom">
         <PlayerHud name={snap.names[perspective]} player={perspective} pieces={display.pieces[perspective]} active={display.current === perspective && display.phase !== 'finished'} note={noteFor(perspective)} />
@@ -346,6 +376,11 @@
       <p class="loading">Preparing the board…</p>
     {/if}
     <Toasts />
+    {#if helpOpen}
+      <div class="help" role="dialog" aria-modal="true" aria-label="How to play">
+        <HowToPlay onclose={() => (helpOpen = false)} />
+      </div>
+    {/if}
     <p class="sr-only" aria-live="polite">{announcement}</p>
   </div>
 {/if}
@@ -374,6 +409,7 @@
   .intro p { margin: 0; padding: 0.4em 1.1em; border: 1px solid var(--gold); border-radius: 12px; background: #060a1fdd; font-family: var(--font-display); font-size: clamp(1.5rem, 5vw, 2.5rem); color: var(--gold); box-shadow: 0 20px 50px #000b; animation: rise 0.45s ease-out; }
   .overlay { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; padding: 20px; background: #060a1fcc; }
   .card { width: min(92vw, 460px); padding: 24px; border: 1px solid var(--gold); border-radius: 16px; background: linear-gradient(180deg, #16307e, #0b1438); box-shadow: 0 30px 80px #000c; }
+  .help { position: fixed; inset: 0; z-index: 50; overflow-y: auto; background: radial-gradient(ellipse at 50% 20%, #1b2f74f5, #060a1ffa); }
   .loading { place-self: center; font-style: italic; }
   @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
 </style>

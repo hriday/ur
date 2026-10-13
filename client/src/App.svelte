@@ -3,6 +3,7 @@
   import SvgDefs from './board/SvgDefs.svelte';
   import { route } from './lib/router.svelte';
   import AiGame from './screens/AiGame.svelte';
+  import HowToPlay from './screens/HowToPlay.svelte';
   import Home from './screens/Home.svelte';
   import LocalGame from './screens/LocalGame.svelte';
   import NotFound from './screens/NotFound.svelte';
@@ -21,6 +22,8 @@
   {#key aiMatch[1]}<AiGame level={aiMatch[1] as AiLevel} />{/key}
 {:else if route.path === '/play/local'}
   <LocalGame />
+{:else if route.path === '/how-to-play'}
+  <HowToPlay />
 {:else}
   <NotFound />
 {/if}
