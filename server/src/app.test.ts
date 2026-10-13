@@ -74,6 +74,13 @@ describe('HTTP API', () => {
     expect(statuses[30]).toBe(429);
   });
 
+  it('keys the rate limit on the forwarded client IP', async () => {
+    const postAs = (ip: string) => fetch(`http://${base}/api/games`, { method: 'POST', headers: { 'X-Forwarded-For': ip } });
+    for (let i = 0; i < 30; i++) expect((await postAs('203.0.113.1')).status).toBe(201);
+    expect((await postAs('203.0.113.1')).status).toBe(429);
+    expect((await postAs('203.0.113.2')).status).toBe(201);
+  });
+
   it('serves the SPA for client routes but not for unknown API routes', async () => {
     expect(await (await fetch(`http://${base}/g/ABCDEF`)).text()).toContain('<title>Ur</title>');
     expect((await fetch(`http://${base}/api/unknown`)).status).toBe(404);
@@ -94,8 +101,14 @@ describe('WebSocket play', () => {
   it('rejects out-of-turn actions only to the sender', async () => {
     const { A, B, first } = await startedGame();
     const wrong = first === 0 ? B : A;
+    const right = first === 0 ? A : B;
+    wrong.drain(); right.drain();
     wrong.send({ type: 'roll' });
     expect(await wrong.until((m) => m.type === 'error')).toMatchObject({ code: 'notYourTurn' });
+    right.send({ type: 'roll' });
+    await right.snap((m) => m.events.length > 0);
+    // right's own messages up to its roll snapshot were consumed by snap; anything earlier would have been an error.
+    expect(right.drain().some((m) => m.type === 'error')).toBe(false);
   });
 
   it('applies one of two rapid duplicate rolls and rejects the other', async () => {
@@ -116,6 +129,7 @@ describe('WebSocket play', () => {
     const tab1 = connect(gameId, a);
     const tab2 = connect(gameId, a);
     expect((await tab2.snap()).snapshot.seat).toBe(0);
+    await tab1.snap();
     tab2.drain();
     tab1.ws.close();
     const s = await tab2.snap();
@@ -135,6 +149,16 @@ describe('WebSocket play', () => {
     const c = connect('NOPE99');
     expect(await c.until((m) => m.type === 'error')).toMatchObject({ code: 'notFound' });
     expect(await c.closed).toBe(4404);
+  });
+
+  it('survives an oversized message and keeps serving', async () => {
+    const { A, B } = await startedGame();
+    A.ws.send('x'.repeat(2000));
+    expect(await A.closed).toBe(1009);
+    B.drain();
+    expect((await post('/api/games')).status).toBe(201);
+    const C = connect((await (await post('/api/games')).json() as Seat).gameId);
+    expect((await C.snap()).snapshot.seat).toBeNull();
   });
 
   it('rejects malformed messages', async () => {

@@ -35,6 +35,7 @@ export function attachSockets(server: Server, service: GameService) {
   };
 
   wss.on('connection', (ws, req) => {
+    ws.on('error', (e) => console.warn('websocket error:', e.message));
     const url = new URL(req.url ?? '/', 'http://localhost');
     let conn: Conn;
     try {
