@@ -84,7 +84,9 @@ export function attachSockets(
       return;
     }
     const room = rooms.get(conn.gameId) ?? new Set<Conn>();
-    if (room.size >= limits.perRoom) {
+    // Only spectators count toward the room cap, so watchers can never lock a seated player out.
+    const spectators = [...room].filter((k) => k.seat === null).length;
+    if (conn.seat === null && spectators >= limits.perRoom) {
       refuse(ws, CLOSE_FULL, 'This game has too many viewers right now — try again later.');
       return;
     }
