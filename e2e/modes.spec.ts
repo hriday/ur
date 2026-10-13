@@ -32,10 +32,13 @@ test('touch: tap previews the destination, a second tap moves', async ({ page },
     if (await dice.isEnabled()) await dice.tap();
     else await page.waitForTimeout(50);
   }
+  const label = await movable.first().getAttribute('aria-label');
   await movable.first().tap();
   await expect(page.locator('.ghost')).toBeVisible();
   await movable.first().tap();
   await expect(page.locator('.ghost')).toHaveCount(0);
+  // The piece really moved: no button with its old label remains.
+  await expect(page.getByRole('button', { name: label!, exact: true })).toHaveCount(0);
 });
 
 test('keyboard: Space throws the dice', async ({ page }, info) => {
@@ -59,6 +62,7 @@ test('rules are explained on their own page and in-game', async ({ page }) => {
 
 test('home fits the screen without sideways scrolling', async ({ page }) => {
   await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Play a Friend' })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });

@@ -5,8 +5,26 @@ export async function quiet(page: Page) {
   await page.addInitScript(() => {
     localStorage.setItem('ur.coach.off', '1');
     localStorage.setItem('ur.muted', '1');
+    // Track every WebSocket so tests can cut the connection without reloading.
+    const w = window as unknown as { __urSockets: WebSocket[] };
+    w.__urSockets = [];
+    const Native = window.WebSocket;
+    window.WebSocket = class extends Native {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        w.__urSockets.push(this);
+      }
+    };
   });
 }
+
+/** Drops the live connection(s) without reloading the page. */
+export async function dropSockets(page: Page) {
+  await page.evaluate(() => (window as unknown as { __urSockets: WebSocket[] }).__urSockets.forEach((s) => s.close()));
+}
+
+/** A seat-specific signal: only seated players see these turn notes. */
+export const seatedNote = (page: Page) => page.getByText(/roll the dice|choose a piece|Their turn/);
 
 function contextOptions(info: TestInfo): BrowserContextOptions {
   const u = info.project.use;
