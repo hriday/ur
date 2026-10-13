@@ -38,7 +38,7 @@
   onpointerleave={(e) => e.pointerType === 'mouse' && onhover?.(false)}
   onfocus={() => onselect?.()}
 >
-  <circle class="hit" r={r + 20} />
+  <circle class="hit" r={(r + 20) / scale} />
   <circle class="halo" r={r + 6} />
   <ellipse class="shadow" cx="3" cy="6" rx={r} ry={r * 0.94} />
   <circle class="body" r={r} />

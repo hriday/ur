@@ -78,9 +78,28 @@
   async function pump() {
     if (animating) return;
     animating = true;
-    while (queue.length) await play(queue.shift()!);
-    animating = false;
-    controller.idle();
+    try {
+      while (queue.length) {
+        const u = queue.shift()!;
+        try {
+          await play(u);
+        } catch (err) {
+          console.error('Animation failed; skipping to the final position', err);
+          snap = u.snapshot;
+          display = u.snapshot.state;
+          overrides = {};
+          flying = {};
+          rolling = false;
+          introText = null;
+          selected = null;
+          hovered = null;
+          pending = false;
+        }
+      }
+    } finally {
+      animating = false;
+      controller.idle();
+    }
   }
 
   async function play(u: Update) {

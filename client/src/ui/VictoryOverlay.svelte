@@ -12,6 +12,11 @@
   }
   let { title, winner, rematchLabel, rematchDisabled = false, onrematch }: Props = $props();
 
+  let card = $state<HTMLElement>();
+  $effect(() => {
+    card?.querySelector<HTMLElement>('button:not([disabled]), a')?.focus();
+  });
+
   const flecks = Array.from({ length: 36 }, () => ({ x: Math.random() * 100, d: Math.random() * 3, t: 3 + Math.random() * 3 }));
 </script>
 
@@ -19,7 +24,7 @@
   <div class="flecks" aria-hidden="true">
     {#each flecks as f}<i style="left:{f.x}%; animation-delay:{f.d}s; animation-duration:{f.t}s"></i>{/each}
   </div>
-  <div class="card p{winner}" in:scale={{ start: 0.85, duration: 400 }}>
+  <div class="card p{winner}" bind:this={card} in:scale={{ start: 0.85, duration: 400 }}>
     <div class="frieze" aria-hidden="true"></div>
     <p class="eyebrow">All seven pieces home</p>
     <h2 id="victory-title">{title}</h2>
