@@ -31,8 +31,9 @@ const post = (p: string) => fetch(`http://${base}${p}`, { method: 'POST' });
 function connect(gameId: string, token?: string) {
   const ws = new WebSocket(`ws://${base}/ws?game=${gameId}${token ? `&token=${token}` : ''}`);
   const inbox: ServerMsg[] = [];
+  const all: ServerMsg[] = [];
   const waiters: (() => void)[] = [];
-  ws.on('message', (d) => { inbox.push(JSON.parse(d.toString())); waiters.splice(0).forEach((w) => w()); });
+  ws.on('message', (d) => { const m = JSON.parse(d.toString()); all.push(m); inbox.push(m); waiters.splice(0).forEach((w) => w()); });
   const closed = new Promise<number>((r) => ws.on('close', (code) => r(code)));
   async function until(pred: (m: ServerMsg) => boolean): Promise<ServerMsg> {
     for (;;) {
@@ -43,7 +44,7 @@ function connect(gameId: string, token?: string) {
   }
   const snap = (pred: (s: Extract<ServerMsg, { type: 'snapshot' }>) => boolean = () => true) =>
     until((m) => m.type === 'snapshot' && pred(m)) as Promise<Extract<ServerMsg, { type: 'snapshot' }>>;
-  return { ws, until, snap, closed, drain: () => inbox.splice(0), send: (m: object) => ws.send(JSON.stringify(m)) };
+  return { ws, all, until, snap, closed, drain: () => inbox.splice(0), send: (m: object) => ws.send(JSON.stringify(m)) };
 }
 
 async function startedGame() {
@@ -103,12 +104,13 @@ describe('WebSocket play', () => {
     const wrong = first === 0 ? B : A;
     const right = first === 0 ? A : B;
     wrong.drain(); right.drain();
+    const before = right.all.length;
     wrong.send({ type: 'roll' });
     expect(await wrong.until((m) => m.type === 'error')).toMatchObject({ code: 'notYourTurn' });
     right.send({ type: 'roll' });
     await right.snap((m) => m.events.length > 0);
-    // right's own messages up to its roll snapshot were consumed by snap; anything earlier would have been an error.
-    expect(right.drain().some((m) => m.type === 'error')).toBe(false);
+    // `all` is a non-consuming log: nothing the other player received since the bad roll may be an error.
+    expect(right.all.slice(before).filter((m) => m.type === 'error')).toEqual([]);
   });
 
   it('applies one of two rapid duplicate rolls and rejects the other', async () => {
