@@ -1,0 +1,4 @@
+ur.moosha.org {
+	encode zstd gzip
+	reverse_proxy localhost:8023
+}
