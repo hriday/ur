@@ -1,7 +1,8 @@
-import { chooseMove, legalMoves, type AiLevel, type GameState } from '@ur/shared';
+import { chooseMove, legalMoves, type AiLevel, type GameState, type Rng } from '@ur/shared';
 import { LocalController } from './local';
 
-export interface AiRequest { state: GameState; level: AiLevel }
+export interface AiRequest { id: number; state: GameState; level: AiLevel }
+export interface AiReply { id: number; piece: number }
 
 const AI_SEAT = 1;
 const THINK_MS = 800;
@@ -13,9 +14,11 @@ export class AiController extends LocalController {
   private worker: Worker | null = null;
   private busy = false;
   private disposed = false;
+  /** Id of the request whose answer we are waiting for; replies to older requests are ignored. */
+  private requestId = 0;
 
-  constructor(private level: AiLevel) {
-    super('ai', ['You', `Computer · ${LEVEL_NAMES[level]}`], [0]);
+  constructor(private level: AiLevel, rng?: Rng) {
+    super('ai', ['You', `Computer · ${LEVEL_NAMES[level]}`], [0], rng, `ai.${level}`);
     try {
       this.worker = new Worker(new URL('./ai.worker.ts', import.meta.url), { type: 'module' });
     } catch (e) {
@@ -55,7 +58,7 @@ export class AiController extends LocalController {
       if (settled) return;
       settled = true;
       clearTimeout(watchdog);
-      after(Math.max(0, THINK_MS - (performance.now() - started)), () => this.move(piece));
+      after(Math.max(0, THINK_MS - (performance.now() - started)), () => this.aiMove(piece));
     };
     const fail = () => settle(this.fallbackMove(s));
 
@@ -64,15 +67,26 @@ export class AiController extends LocalController {
       fail();
       return;
     }
-    w.onmessage = (e: MessageEvent<number>) => settle(e.data);
+    const id = ++this.requestId;
+    w.onmessage = (e: MessageEvent<AiReply>) => {
+      if (e.data?.id !== id) return; // a late answer to an earlier position
+      settle(e.data.piece);
+    };
     w.onerror = fail;
     w.onmessageerror = fail;
     watchdog = setTimeout(fail, WATCHDOG_MS);
     try {
-      w.postMessage({ state: s, level: this.level } satisfies AiRequest);
+      w.postMessage({ id, state: s, level: this.level } satisfies AiRequest);
     } catch {
       fail();
     }
+  }
+
+  /** Plays the chosen piece, or the first legal move if that choice is somehow not playable. */
+  private aiMove(piece: number) {
+    const moves = legalMoves(this.state);
+    if (!moves.length) return;
+    this.move(moves.some((m) => m.piece === piece) ? piece : moves[0].piece);
   }
 
   override dispose() {

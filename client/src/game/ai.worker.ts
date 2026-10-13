@@ -1,9 +1,10 @@
 import { chooseMove } from '@ur/shared';
-import type { AiRequest } from './aiController';
+import type { AiReply, AiRequest } from './aiController';
 
 const ctx = self as unknown as {
   onmessage: ((e: MessageEvent<AiRequest>) => void) | null;
-  postMessage(piece: number): void;
+  postMessage(reply: AiReply): void;
 };
 
-ctx.onmessage = (e) => ctx.postMessage(chooseMove(e.data.state, e.data.level, { budgetMs: 600 }));
+ctx.onmessage = (e) =>
+  ctx.postMessage({ id: e.data.id, piece: chooseMove(e.data.state, e.data.level, { budgetMs: 600 }) });
