@@ -1,0 +1,28 @@
+[Unit]
+Description=ur.moosha.org - The Royal Game of Ur (Node + SQLite)
+After=network.target
+
+[Service]
+Type=simple
+User=ur
+Group=ur
+WorkingDirectory=/opt/ur/app
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8023
+Environment=DATA_DIR=/var/lib/ur
+Environment=CLIENT_DIR=/opt/ur/app/client/dist
+ExecStart=/usr/bin/node server/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+# Sandboxing (same house style as the other apps on this host). The whole
+# filesystem is read-only to the service except the SQLite data directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ur
+
+[Install]
+WantedBy=multi-user.target
