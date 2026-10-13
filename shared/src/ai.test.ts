@@ -81,4 +81,17 @@ describe('chooseMove', () => {
     for (let seed = 1; seed <= 150; seed++) if (playMatch('hard', 'easy', seed, { maxDepth: 3, budgetMs: 1e9 }) === 0) wins++;
     expect(wins / 150).toBeGreaterThan(0.55);
   }, 180_000);
+
+  it('hard (depth 3) holds its own against medium', () => {
+    // Each seed is played twice with the seats swapped, so neither side gets the luckier dice.
+    let wins = 0;
+    const seeds = 200;
+    const started = Date.now();
+    for (let seed = 1; seed <= seeds; seed++) {
+      if (playMatch('hard', 'medium', seed, { maxDepth: 3, budgetMs: 1e9 }) === 0) wins++;
+      if (playMatch('medium', 'hard', seed, { maxDepth: 3, budgetMs: 1e9 }) === 1) wins++;
+    }
+    expect(wins / (2 * seeds)).toBeGreaterThanOrEqual(0.5);
+    expect(Date.now() - started).toBeLessThan(150_000);
+  }, 180_000);
 });

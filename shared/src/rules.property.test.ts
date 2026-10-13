@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OFF, isShared } from './board';
+import { CENTRAL_ROSETTE, OFF, isShared } from './board';
 import { ROLL_ODDS, diceTotal, rollDice } from './dice';
 import { mulberry32 } from './rng';
 import { applyMove, applyRoll, legalMoves, newGame } from './rules';
@@ -28,7 +28,11 @@ describe('random play', () => {
         if (s.phase === 'awaitingRoll') s = applyRoll(s, rollDice(rng)).state;
         else {
           const moves = legalMoves(s);
-          s = applyMove(s, moves[Math.floor(rng() * moves.length)].piece).state;
+          const t = applyMove(s, moves[Math.floor(rng() * moves.length)].piece);
+          // The central rosette is a safe square: nothing is ever captured there.
+          for (const e of t.events) if (e.type === 'captured') expect(e.at).not.toBe(CENTRAL_ROSETTE);
+          expect(moves.some((m) => m.capture && m.to === CENTRAL_ROSETTE)).toBe(false);
+          s = t.state;
         }
         checkInvariants(s);
         expect(++steps).toBeLessThan(5000);

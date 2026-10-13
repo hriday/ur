@@ -106,6 +106,20 @@ describe('applyMove', () => {
     expect(state.current).toBe(0);
     expect(events).toContainEqual({ type: 'rosette', player: 0, at: 4 });
   });
+  it('grants another roll on the central rosette (8) and the last rosette (14)', () => {
+    for (const [from, roll, to] of [[6, 2, 8], [12, 2, 14], [10, 4, 14]] as const) {
+      const { state, events } = applyMove(rolled(at([from]), roll), 0);
+      expect(state.pieces[0][0]).toBe(to);
+      expect(state).toMatchObject({ current: 0, phase: 'awaitingRoll' });
+      expect(events).toContainEqual({ type: 'rosette', player: 0, at: to });
+    }
+  });
+  it('grants no extra roll when bearing off from the rosette on 14', () => {
+    const { state, events } = applyMove(rolled(at([14, 3]), 1), 0);
+    expect(state.pieces[0][0]).toBe(15);
+    expect(state).toMatchObject({ current: 1, phase: 'awaitingRoll' });
+    expect(events.map((e) => e.type)).toEqual(['moved', 'borneOff']);
+  });
   it('sends a captured piece home', () => {
     const { state, events } = applyMove(rolled(at([6], [5, 9]), 3), 0);
     expect(state.pieces[1]).toEqual([5, 0, 0, 0, 0, 0, 0]);
