@@ -21,7 +21,7 @@ ssh "$HOST" 'set -e
 echo "== Caddy site block"
 ssh "$HOST" 'set -e
   CF=/etc/caddy/Caddyfile
-  if grep -q "^ur\.moosha\.org" "$CF"; then
+  if grep -qE "(^|[ ,])ur\.moosha\.org([ ,{]|$)" "$CF"; then
     echo "ur.moosha.org already present in $CF - leaving it alone"; cat >/dev/null; exit 0
   fi
   BAK="$CF.bak-preur-$(date +%Y%m%d-%H%M%S)"

@@ -14,9 +14,9 @@ echo "== runtime package.json"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 node -e '
-  const s = require("./server/package.json");
+  // Pin the exact versions installed (and tested) locally.
   const pick = ["better-sqlite3", "express", "ws"];
-  const deps = Object.fromEntries(pick.map((k) => [k, s.dependencies[k]]));
+  const deps = Object.fromEntries(pick.map((k) => [k, require("./node_modules/" + k + "/package.json").version]));
   const pkg = { name: "ur-runtime", private: true, type: "module", dependencies: deps };
   require("fs").writeFileSync(process.argv[1] + "/package.json", JSON.stringify(pkg, null, 2) + "\n");
 ' "$STAGE"

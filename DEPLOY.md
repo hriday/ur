@@ -33,7 +33,7 @@ are taken by other apps). Caddy terminates TLS and proxies HTTP and WebSocket
   `/etc/caddy/Caddyfile.bak-preur-<timestamp>`, runs `caddy validate`, reloads on
   success and restores the backup on failure. Safe to re-run.
 - `deploy.sh` - `npm run build` locally, rsync `server/dist/`, `client/dist/` and a
-  generated runtime `package.json` to `/opt/ur/app`, `npm install --omit=dev` there
+  generated runtime `package.json` (exact versions from the local `node_modules`) to `/opt/ur/app`, `npm install --omit=dev` there
   as `ur`, restart the service and health-check `127.0.0.1:8023/healthz`.
   Idempotent; re-run for every update.
 
@@ -61,6 +61,7 @@ curl -fsS https://ur.moosha.org/healthz
 - Restart: `ssh root@ur.moosha.org systemctl restart ur`
 - Backup the database (online-safe):
   `ssh root@ur.moosha.org "sqlite3 /var/lib/ur/ur.sqlite \".backup '/root/ur-\$(date +%F).sqlite'\""`
+  (needs the `sqlite3` CLI on the server; fallback: `systemctl stop ur`, copy `/var/lib/ur/ur.sqlite*`, `systemctl start ur`).
 - Games with no moves for 7 days are deleted automatically (hourly sweep).
 
 ## Removing it
