@@ -126,6 +126,7 @@ describe('HTTP API', () => {
 
   it('serves the SPA for client routes but not for unknown API routes', async () => {
     expect(await (await fetch(`http://${base}/g/ABCDEF`)).text()).toContain('<title>Ur</title>');
+    expect((await fetch(`http://${base}/`, { method: 'HEAD' })).status).toBe(200);
     expect((await fetch(`http://${base}/api/unknown`)).status).toBe(404);
   });
 });

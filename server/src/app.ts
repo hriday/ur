@@ -78,7 +78,7 @@ export function createApp({ service, clientDir, now = Date.now, socketLimits }: 
     app.use('/assets', express.static(path.join(clientDir, 'assets'), { immutable: true, maxAge: '1y' }));
     app.use(express.static(clientDir, { index: false }));
     app.use((req, res, next) => {
-      if (req.method !== 'GET') return next();
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(clientDir, 'index.html'));
     });
