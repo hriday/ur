@@ -1,7 +1,7 @@
 # The Royal Game of Ur — Design Spec
 
 **Date:** 2026-10-12
-**Status:** Approved in brainstorming, pending written-spec review
+**Status:** Approved
 
 ## 1. Goal
 
@@ -102,8 +102,25 @@ Pure functions over an immutable `GameState`:
 - **Interaction:** movable pieces glow; hover/tap previews the destination as a ghost piece; pieces slide square-by-square along the path.
 - **Moment animations:** capture (spark + piece flies home), rosette (bloom + "Roll again" banner), bear-off (piece rises into the finished tray), victory (gilded celebration).
 - **Home:** lapis night sky, title, three mode buttons; AI difficulty chosen on selection.
-- **How to Play:** illustrated rules plus brief history of the game.
+- **How to Play:** see §4.1.
 - **Sound:** soft clay/stone sounds for dice, moves, captures, rosettes; mute toggle persisted.
+
+### 4.1 Teaching the rules
+
+Newcomers must be able to learn the game without outside help.
+
+- **How to Play page** (`/how-to-play`, linked from home and from an ever-present "?" button in-game, opening as an overlay so the game isn't lost). Short illustrated sections, each with a small animated SVG diagram drawn in the game's own style:
+  1. *The goal* — race all 7 pieces along your route and off the board first.
+  2. *The dice* — four pyramids; count the marked tips facing up (0–4), with the odds shown visually (2 is most common).
+  3. *The route* — animated path tracing squares 1–14 for your side, highlighting your private squares and the shared "battle" row.
+  4. *Moving* — move one piece exactly the roll; you can't land on your own piece; bearing off needs an exact roll.
+  5. *Capturing* — land on a rival in the shared row to send it home.
+  6. *Rosettes* — land on one to roll again; the central rosette is a safe haven no one can capture.
+  7. *Passing* — a roll of 0 or no legal move passes your turn.
+  8. *Strategy tips* — three or four short hints (hold the central rosette, don't linger just ahead of a rival, spread risk).
+  9. *History* — a short note on the 4,500-year-old game from the Royal Cemetery at Ur and Irving Finkel's reconstruction from a cuneiform tablet.
+- **First-game coaching:** the first time a player starts any mode, an optional, dismissible coach-marks layer explains each situation as it first occurs (first roll, first entering piece, first rosette, first capture threat, first pass). Dismissal is remembered in `localStorage`; it can be re-enabled from How to Play.
+- **In-context explanations during play:** short toasts explain every automatic or rules-driven event — "Rolled 0 — turn passes", "No legal moves — turn passes", "Rosette! Roll again", "Safe on the central rosette", "Exact roll needed to bear off". Illegal taps on a piece get a one-line reason instead of silently doing nothing.
 
 ### Mobile
 
@@ -142,6 +159,7 @@ All levels use the shared engine.
 ## 8. Deployment
 
 - `npm run build` produces the client bundle and compiled server; the server serves the client statically.
-- Runs on the user's DigitalOcean droplet as a **systemd** service (`ur.service`), with the SQLite file in a data directory.
+- **Target:** `root@ur.moosha.org` (DigitalOcean droplet, 143.110.208.106), served at `https://ur.moosha.org`.
+- Runs on the droplet as a **systemd** service (`ur.service`), with the SQLite file in a data directory.
 - **Caddy** reverse proxy provides HTTPS and WebSocket upgrade.
 - A `DEPLOY.md` documents setup, updating and backups (copying the SQLite file).
