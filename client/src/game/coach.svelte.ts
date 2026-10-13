@@ -10,7 +10,7 @@ const TIPS: Record<TipKey, () => string> = {
       : 'Glowing pieces can move. Tap one to see where it would land, then tap again to move it.',
   rosette: () => 'A rosette! Landing on one gives you another throw.',
   central: () => 'The central rosette is a safe haven — a piece resting there cannot be captured.',
-  danger: () => 'Careful: a rival piece is up to four squares behind yours in the shared row and could capture it.',
+  danger: () => 'Careful: a rival piece is up to four squares behind yours and could capture it.',
   capture: () => 'Capture! Landing on a rival in the shared row sends that piece back to the start.',
   pass: () => 'A throw of zero, or a throw with no legal move, passes the turn.',
 };
@@ -30,7 +30,15 @@ function write(key: string, value: string | null) {
 
 let enabled = $state(read(OFF_KEY) !== '1');
 let current = $state<TipKey | null>(null);
-let seen = new Set<string>(JSON.parse(read(SEEN_KEY) ?? '[]') as string[]);
+function readSeen(): Set<string> {
+  try {
+    const parsed: unknown = JSON.parse(read(SEEN_KEY) ?? '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+let seen = readSeen();
 
 export const coach = {
   get current() { return current; },

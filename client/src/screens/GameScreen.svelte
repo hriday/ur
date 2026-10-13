@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, type Snippet } from 'svelte';
+  import { onDestroy, tick, type Snippet } from 'svelte';
   import { CENTRAL_ROSETTE, OFF, START, isShared, legalMoves, other, whyCannotMove, type GameEvent, type GameState, type Player } from '@ur/shared';
   import { sound } from '../audio/sound.svelte';
   import Board from '../board/Board.svelte';
@@ -36,6 +36,36 @@
   let announcement = $state('');
   let vertical = $state(false);
   let helpOpen = $state(false);
+  let helpEl = $state<HTMLElement | null>(null);
+  let helpReturn: HTMLElement | null = null;
+
+  function openHelp() {
+    helpReturn = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    helpOpen = true;
+  }
+
+  function closeHelp() {
+    helpOpen = false;
+    const back = helpReturn;
+    helpReturn = null;
+    // Wait for the game to leave inert before restoring focus.
+    void tick().then(() => back?.focus());
+  }
+
+  $effect(() => {
+    if (helpEl) helpEl.querySelector<HTMLElement>('button, a')?.focus();
+  });
+
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== 'Tab' || !helpEl) return;
+    const items = [...helpEl.querySelectorAll<HTMLElement>('button, a[href]')].filter((el) => !el.hasAttribute('disabled'));
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!helpEl.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
 
   const queue: Update[] = [];
   let introShown = false;
@@ -269,7 +299,7 @@
 
   function onKey(e: KeyboardEvent) {
     if (helpOpen) {
-      if (e.key === 'Escape') helpOpen = false;
+      if (e.key === 'Escape') closeHelp();
       return;
     }
     if (e.defaultPrevented || e.altKey || e.metaKey || e.ctrlKey) return;
@@ -330,13 +360,16 @@
 {#if status === 'notFound' && gone}
   {@render gone()}
 {:else}
-  <div class="screen" class:vertical>
-    <TopBar onhelp={() => (helpOpen = true)} />
+  <div class="screen" class:vertical class:coaching={!!coach.current} inert={helpOpen}>
+    <TopBar onhelp={openHelp} />
     {#if status === 'reconnecting'}<div class="banner" role="status">Connection lost — reconnecting…</div>{/if}
     {#if snap?.spectator}<div class="banner subtle" role="status">You are watching this game.</div>{/if}
 
     {#if display && snap}
+      <div class="top">
       <PlayerHud name={snap.names[top]} player={top} pieces={display.pieces[top]} active={display.current === top && display.phase !== 'finished'} note={noteFor(top)} />
+      <Coach />
+      </div>
       <div class="board-wrap">
         <Board
           state={display}
@@ -353,7 +386,6 @@
           onghost={() => selected !== null && doMove(selected)}
         />
         {#if introText}<div class="intro" role="status"><p>{introText}</p></div>{/if}
-        <Coach />
       </div>
       <div class="bottom">
         <PlayerHud name={snap.names[perspective]} player={perspective} pieces={display.pieces[perspective]} active={display.current === perspective && display.phase !== 'finished'} note={noteFor(perspective)} />
@@ -376,13 +408,14 @@
       <p class="loading">Preparing the board…</p>
     {/if}
     <Toasts />
-    {#if helpOpen}
-      <div class="help" role="dialog" aria-modal="true" aria-label="How to play">
-        <HowToPlay onclose={() => (helpOpen = false)} />
-      </div>
-    {/if}
     <p class="sr-only" aria-live="polite">{announcement}</p>
   </div>
+  {#if helpOpen}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div class="help" role="dialog" aria-modal="true" aria-label="How to play" tabindex="-1" bind:this={helpEl} onkeydown={trapTab}>
+      <HowToPlay onclose={closeHelp} />
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -395,10 +428,13 @@
     gap: 10px;
     padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
+  .top { display: grid; gap: 8px; }
   .board-wrap { position: relative; display: grid; place-items: center; min-height: 0; }
   .board-wrap :global(svg.board) { max-height: calc(100dvh - 250px); }
   .bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
   .bottom > :global(.hud) { flex: 1 1 260px; }
+  .coaching .board-wrap :global(svg.board) { max-height: calc(100dvh - 400px); }
+  .vertical.coaching .board-wrap :global(svg.board) { max-height: calc(100dvh - 470px); }
   .vertical .board-wrap :global(svg.board) { max-height: calc(100dvh - 300px); }
   .vertical .bottom { flex-direction: column-reverse; align-items: stretch; }
   .vertical .bottom > :global(.hud) { flex: none; }
