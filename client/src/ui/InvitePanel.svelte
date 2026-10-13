@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SeatLink from './SeatLink.svelte';
+
   let { gameId }: { gameId: string } = $props();
 
   const url = $derived(`${location.origin}/g/${gameId}`);
@@ -33,7 +35,8 @@
     <button class="btn" onclick={copy}>{copied ? 'Copied ✓' : 'Copy link'}</button>
     {#if canShare}<button class="btn ghost" onclick={share}>Share…</button>{/if}
   </div>
-  <p class="hint">The game begins as soon as they open it.</p>
+  <p class="hint">The game begins as soon as they open it and choose Join.</p>
+  <SeatLink {gameId} />
 </div>
 
 <style>

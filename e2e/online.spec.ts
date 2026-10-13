@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { act, dropSockets, newPlayer, playUntilVictory, quiet, seatedNote } from './helpers';
+import { act, cspViolations, dropSockets, newPlayer, playUntilVictory, quiet, seatedNote } from './helpers';
 
 test('two friends play a full online game, survive a reconnect, and rematch', async ({ browser }, info) => {
   const a = await newPlayer(browser, info);
@@ -19,6 +19,8 @@ test('two friends play a full online game, survive a reconnect, and rematch', as
   expect(url.toString()).not.toBe(link);
   await b.page.goto(url.toString());
   expect(b.page.url()).toContain(`/g/${code.toLowerCase()}`);
+  await expect(b.page.getByText('Join this game as the second player?')).toBeVisible();
+  await b.page.getByRole('button', { name: 'Join', exact: true }).click();
   await expect(a.page.getByTestId('invite')).toBeHidden();
   await expect(b.page.getByTestId('dice')).toBeVisible();
   await expect(seatedNote(b.page)).toBeVisible();
@@ -64,6 +66,50 @@ test('two friends play a full online game, survive a reconnect, and rematch', as
   await b.page.getByRole('button', { name: 'Accept rematch' }).click();
   await expect(a.page.getByTestId('victory')).toBeHidden();
   await expect(b.page.getByTestId('victory')).toBeHidden();
+});
+
+test('seats are confirmed, can be declined, and travel to another device by private link', async ({ browser }, info) => {
+  const a = await newPlayer(browser, info);
+  await a.page.goto('/');
+  await a.page.getByRole('button', { name: 'Play a Friend' }).click();
+  await expect(a.page.getByTestId('invite')).toBeVisible();
+  const link = await a.page.getByLabel('Invite link').inputValue();
+
+  // The creator opening their own invite in another browser is asked first, and can just watch.
+  const other = await newPlayer(browser, info);
+  await other.page.goto(link);
+  await other.page.getByRole('button', { name: 'Just watch' }).click();
+  await expect(other.page.getByText('You are watching this game.')).toBeVisible();
+  await expect(other.page.getByTestId('invite')).toHaveCount(0);
+  await expect(a.page.getByTestId('invite')).toBeVisible(); // seat B is still free
+
+  // The real friend joins.
+  const b = await newPlayer(browser, info);
+  await b.page.goto(link);
+  await b.page.getByRole('button', { name: 'Join', exact: true }).click();
+  await expect(a.page.getByTestId('invite')).toBeHidden();
+  await expect(seatedNote(b.page)).toBeVisible();
+  for (let i = 0; i < 6; i++) { await act(a.page); await act(b.page); }
+
+  // The creator's private link restores their seat in a fresh browser, and the fragment is stripped.
+  await a.page.getByRole('button', { name: 'Continue on another device' }).click();
+  await expect(a.page.getByText('anyone with this link can take your seat')).toBeVisible();
+  const privateLink = await a.page.getByLabel('Private link').inputValue();
+  expect(privateLink).toMatch(/\/g\/[A-Z0-9]+#seat=[\w-]+$/);
+  const d = await newPlayer(browser, info);
+  await d.page.goto(privateLink);
+  await expect(seatedNote(d.page)).toBeVisible();
+  await expect(d.page.getByText('You are watching this game.')).toHaveCount(0);
+  await expect(d.page.getByText('Join this game as the second player?')).toHaveCount(0);
+  expect(new URL(d.page.url()).hash).toBe('');
+  expect(d.page.url()).toBe(link);
+  // The seat persists in that browser: a plain reload keeps it.
+  await d.page.reload();
+  await expect(seatedNote(d.page)).toBeVisible();
+  await expect(d.page.getByRole('button', { name: 'Continue on another device' })).toBeVisible();
+  // Spectators get no private link.
+  await expect(other.page.getByRole('button', { name: 'Continue on another device' })).toHaveCount(0);
+  for (const p of [a.page, b.page, d.page, other.page]) expect(await cspViolations(p)).toEqual([]);
 });
 
 test('an unknown game shows a friendly message', async ({ page }) => {

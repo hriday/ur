@@ -18,8 +18,14 @@
   import { toasts } from '../ui/toastStore.svelte';
   import HowToPlay from './HowToPlay.svelte';
 
-  interface Props { controller: GameController; invite?: Snippet; gone?: Snippet }
-  let { controller, invite, gone }: Props = $props();
+  interface Props {
+    controller: GameController;
+    invite?: Snippet;
+    gone?: Snippet;
+    /** Top-bar action shown only to seated players (online: continue on another device). */
+    seatLink?: Snippet;
+  }
+  let { controller, invite, gone, seatLink }: Props = $props();
 
   let snap = $state<Snapshot | null>(null);
   let display = $state<GameState | null>(null);
@@ -361,7 +367,7 @@
   {@render gone()}
 {:else}
   <div class="screen" class:vertical class:coaching={!!coach.current} inert={helpOpen}>
-    <TopBar onhelp={openHelp} />
+    <TopBar onhelp={openHelp} extra={snap && !snap.spectator ? seatLink : undefined} />
     {#if status === 'reconnecting'}<div class="banner" role="status">Connection lost — reconnecting…</div>{/if}
     {#if snap?.spectator}<div class="banner subtle" role="status">You are watching this game.</div>{/if}
 
@@ -392,7 +398,7 @@
         <Dice dice={rolling ? null : display.dice} total={display.roll} {rolling} enabled={canRoll} onroll={doRoll} />
       </div>
 
-      {#if !bothSeated && invite}
+      {#if !bothSeated && invite && !snap.spectator}
         <div class="overlay"><div class="card">{@render invite()}</div></div>
       {/if}
       {#if finished && display.winner !== null}

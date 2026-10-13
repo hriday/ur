@@ -1,8 +1,9 @@
 <script lang="ts">
   import { sound } from '../audio/sound.svelte';
+  import type { Snippet } from 'svelte';
   import { link } from '../lib/router.svelte';
 
-  let { onhelp }: { onhelp?: () => void } = $props();
+  let { onhelp, extra }: { onhelp?: () => void; extra?: Snippet } = $props();
 </script>
 
 <header class="topbar">
@@ -11,6 +12,7 @@
     <span>Ur</span>
   </a>
   <div class="actions">
+    {@render extra?.()}
     {#if onhelp}
       <button class="icon" onclick={onhelp} aria-label="How to play">?</button>
     {/if}
@@ -24,7 +26,7 @@
 </header>
 
 <style>
-  .topbar { display: flex; align-items: center; justify-content: space-between; }
+  .topbar { position: relative; display: flex; align-items: center; justify-content: space-between; }
   .home { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding-right: 8px; font-family: var(--font-display); font-size: 1.2rem; letter-spacing: 0.15em; text-decoration: none; }
   .actions { display: flex; gap: 8px; }
   .icon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #e2bf6355; border-radius: 50%; background: #0b143888; color: var(--gold); font-family: var(--font-display); font-size: 1.2rem; cursor: pointer; }
