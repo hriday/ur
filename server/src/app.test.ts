@@ -240,6 +240,16 @@ describe('WebSocket limits', () => {
     expect((await again.snap()).snapshot.gameId).toBe(gameId);
   });
 
+  it('lets a seated player reconnect even when spectators fill the per-game cap', async () => {
+    const { gameId, seatToken } = await (await post('/api/games')).json() as Seat;
+    const watchers = Array.from({ length: DEFAULT_SOCKET_LIMITS.perRoom }, () => connect(gameId));
+    for (const c of watchers) await c.snap();
+    const extra = connect(gameId);
+    expect(await extra.closed).toBe(1013);
+    const owner = connect(gameId, seatToken);
+    expect((await owner.snap()).snapshot.seat).toBe(0);
+  });
+
   it('refuses sockets beyond the per-address cap, keyed on the forwarded client IP', async () => {
     await stop();
     await start({ ...DEFAULT_SOCKET_LIMITS, perIp: 4 });
