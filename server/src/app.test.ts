@@ -3,33 +3,41 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Server } from 'node:http';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { mulberry32, type ServerMsg } from '@ur/shared';
 import { createApp } from './app';
-import { openRepo } from './repo';
+import { openRepo, type Repo } from './repo';
 import { createGameService } from './service';
+import { DEFAULT_SOCKET_LIMITS, type SocketLimits } from './sockets';
 import { randomBytes } from 'node:crypto';
 
 let server: Server;
 let base: string;
 let clientDir: string;
+let repo: Repo;
+
+async function start(socketLimits?: SocketLimits) {
+  repo = openRepo(':memory:');
+  const service = createGameService({ repo, rng: mulberry32(3), randomBytes, now: Date.now });
+  server = createApp({ service, clientDir, socketLimits });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  base = `127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+const stop = () => new Promise<void>((r) => server.close(() => r()));
 
 beforeEach(async () => {
   clientDir = mkdtempSync(path.join(tmpdir(), 'ur-client-'));
   writeFileSync(path.join(clientDir, 'index.html'), '<!doctype html><title>Ur</title>');
-  const service = createGameService({ repo: openRepo(':memory:'), rng: mulberry32(3), randomBytes, now: Date.now });
-  server = createApp({ service, clientDir });
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  base = `127.0.0.1:${(server.address() as AddressInfo).port}`;
+  await start();
 });
-afterEach(() => new Promise<void>((r) => server.close(() => r())));
+afterEach(stop);
 
 type Seat = { gameId: string; seatToken: string };
 const post = (p: string) => fetch(`http://${base}${p}`, { method: 'POST' });
 
-function connect(gameId: string, token?: string) {
-  const ws = new WebSocket(`ws://${base}/ws?game=${gameId}${token ? `&token=${token}` : ''}`);
+function connect(gameId: string, token?: string, headers?: Record<string, string>) {
+  const ws = new WebSocket(`ws://${base}/ws?game=${gameId}${token ? `&token=${token}` : ''}`, { headers });
   const inbox: ServerMsg[] = [];
   const all: ServerMsg[] = [];
   const waiters: (() => void)[] = [];
@@ -80,6 +88,40 @@ describe('HTTP API', () => {
     for (let i = 0; i < 30; i++) expect((await postAs('203.0.113.1')).status).toBe(201);
     expect((await postAs('203.0.113.1')).status).toBe(429);
     expect((await postAs('203.0.113.2')).status).toBe(201);
+  });
+
+  it('caps new games from all addresses together', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 301; i++) {
+      const ip = `198.51.${Math.floor(i / 250)}.${i % 250}`;
+      statuses.push((await fetch(`http://${base}/api/games`, { method: 'POST', headers: { 'X-Forwarded-For': ip } })).status);
+    }
+    expect(statuses.slice(0, 300).every((s) => s === 201)).toBe(true);
+    expect(statuses[300]).toBe(429);
+  });
+
+  it('counts an IPv6 /64 as one address', async () => {
+    const postAs = (ip: string) => fetch(`http://${base}/api/games`, { method: 'POST', headers: { 'X-Forwarded-For': ip } });
+    for (let i = 0; i < 30; i++) expect((await postAs(`2001:db8:1:2::${(i + 1).toString(16)}`)).status).toBe(201);
+    expect((await postAs('2001:db8:1:2:ffff:1:2:3')).status).toBe(429);
+    expect((await postAs('2001:db8:1:3::1')).status).toBe(201);
+  });
+
+  it('sends security headers and hides the framework', async () => {
+    for (const p of ['/', '/g/ABCDEF', '/api/games/NOPE99', '/healthz']) {
+      const res = await fetch(`http://${base}${p}`);
+      expect(res.headers.get('x-powered-by')).toBeNull();
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+      expect(res.headers.get('x-frame-options')).toBe('DENY');
+      const csp = res.headers.get('content-security-policy') ?? '';
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).toContain("script-src 'self'");
+      expect(csp).toContain(`connect-src 'self' ws://${base} wss://${base}`);
+      expect(csp).toContain('https://fonts.googleapis.com');
+      expect(csp).toContain('https://fonts.gstatic.com');
+      expect(csp).toContain("worker-src 'self' blob:");
+    }
   });
 
   it('serves the SPA for client routes but not for unknown API routes', async () => {
@@ -167,5 +209,65 @@ describe('WebSocket play', () => {
     const { A } = await startedGame();
     A.ws.send('garbage');
     expect(await A.until((m) => m.type === 'error')).toMatchObject({ code: 'badMessage' });
+  });
+});
+
+describe('WebSocket limits', () => {
+  it('loads the room once per broadcast, however many sockets watch it', async () => {
+    const { gameId, A, B, first } = await startedGame();
+    const watchers = Array.from({ length: 6 }, () => connect(gameId));
+    for (const w of watchers) await w.snap();
+    // Let every join broadcast settle before counting.
+    await new Promise((r) => setTimeout(r, 100));
+    const get = vi.spyOn(repo, 'get');
+    (first === 0 ? A : B).send({ type: 'roll' });
+    for (const w of [A, B, ...watchers]) await w.snap((m) => m.events.length > 0);
+    // One load to apply the roll, one for the broadcast to all eight sockets.
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses sockets beyond the per-game cap', async () => {
+    const { gameId } = await (await post('/api/games')).json() as Seat;
+    const ok = Array.from({ length: DEFAULT_SOCKET_LIMITS.perRoom }, () => connect(gameId));
+    for (const c of ok) await c.snap();
+    const extra = connect(gameId);
+    expect(await extra.until((m) => m.type === 'error')).toMatchObject({ code: 'rateLimited' });
+    expect(await extra.closed).toBe(1013);
+    ok[0].ws.close();
+    await ok[0].closed;
+    const again = connect(gameId);
+    expect((await again.snap()).snapshot.gameId).toBe(gameId);
+  });
+
+  it('refuses sockets beyond the per-address cap, keyed on the forwarded client IP', async () => {
+    await stop();
+    await start({ ...DEFAULT_SOCKET_LIMITS, perIp: 4 });
+    const { gameId } = await (await post('/api/games')).json() as Seat;
+    const as = (ip: string) => connect(gameId, undefined, { 'X-Forwarded-For': ip });
+    const ok = Array.from({ length: 4 }, () => as('203.0.113.7'));
+    for (const c of ok) await c.snap();
+    const extra = as('203.0.113.7');
+    expect(await extra.until((m) => m.type === 'error')).toMatchObject({ code: 'rateLimited' });
+    expect(await extra.closed).toBe(1013);
+    expect((await as('203.0.113.8').snap()).snapshot.gameId).toBe(gameId);
+  });
+
+  it('closes a flooding socket with 1008 and keeps serving everyone else', async () => {
+    const { gameId, A, B } = await startedGame();
+    for (let i = 0; i < 200; i++) A.ws.send('garbage');
+    expect(await A.closed).toBe(1008);
+    expect(A.all.some((m) => m.type === 'error' && m.code === 'rateLimited')).toBe(true);
+    // A holds seat 0; B sees it leave.
+    await B.snap((m) => !m.snapshot.connected[0]);
+    const spectator = connect(gameId);
+    expect((await spectator.snap()).snapshot.seat).toBeNull();
+    expect((await post('/api/games')).status).toBe(201);
+  });
+
+  it('allows a normal pace of messages', async () => {
+    const { A } = await startedGame();
+    for (let i = 0; i < 30; i++) A.ws.send('garbage');
+    for (let i = 0; i < 30; i++) await A.until((m) => m.type === 'error' && m.code === 'badMessage');
+    expect(A.ws.readyState).toBe(WebSocket.OPEN);
   });
 });

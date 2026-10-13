@@ -56,6 +56,18 @@ export function createGameService({ repo, rng, randomBytes, now }: ServiceDeps) 
     }
   }
 
+  /** The room as everyone sees it; callers add the receiver's own `seat`. Loads the record once. */
+  function roomView(id: string, connected: [boolean, boolean]): Omit<RoomSnapshot, 'seat'> {
+    const rec = load(id);
+    return {
+      gameId: rec.id,
+      state: rec.room.state,
+      seated: [true, rec.seatHashes[1] !== null],
+      connected,
+      rematch: rec.room.rematch,
+    };
+  }
+
   return {
     create() {
       const id = newId();
@@ -95,16 +107,10 @@ export function createGameService({ repo, rng, randomBytes, now }: ServiceDeps) 
       return null;
     },
 
+    roomView,
+
     snapshot(id: string, seat: Player | null, connected: [boolean, boolean]): RoomSnapshot {
-      const rec = load(id);
-      return {
-        gameId: rec.id,
-        state: rec.room.state,
-        seat,
-        seated: [true, rec.seatHashes[1] !== null],
-        connected,
-        rematch: rec.room.rematch,
-      };
+      return { ...roomView(id, connected), seat };
     },
 
     roll(id: string, seat: Player | null) {
